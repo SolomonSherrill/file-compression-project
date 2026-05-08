@@ -1,0 +1,514 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>LZW File Compressor</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f6f7f9;
+        --panel: #ffffff;
+        --panel-border: #d9dee8;
+        --text: #17202a;
+        --muted: #617080;
+        --accent: #087f8c;
+        --accent-dark: #06636d;
+        --danger: #b42318;
+        --success: #177245;
+        --shadow: 0 18px 45px rgba(32, 44, 57, 0.11);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(246, 247, 249, 0.92)),
+          radial-gradient(circle at top left, rgba(8, 127, 140, 0.12), transparent 32rem);
+        color: var(--text);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      main {
+        width: min(1120px, calc(100% - 32px));
+        margin: 0 auto;
+        padding: 48px 0;
+      }
+
+      header {
+        display: grid;
+        gap: 10px;
+        margin-bottom: 28px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(2rem, 5vw, 4rem);
+        line-height: 1;
+        letter-spacing: 0;
+      }
+
+      .subtitle {
+        max-width: 720px;
+        margin: 0;
+        color: var(--muted);
+        font-size: 1.02rem;
+        line-height: 1.6;
+      }
+
+      .app {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 18px;
+      }
+
+      .tool {
+        display: grid;
+        gap: 18px;
+        min-width: 0;
+        padding: 22px;
+        background: var(--panel);
+        border: 1px solid var(--panel-border);
+        border-radius: 8px;
+        box-shadow: var(--shadow);
+      }
+
+      .tool h2 {
+        margin: 0;
+        font-size: 1.25rem;
+        letter-spacing: 0;
+      }
+
+      .dropzone {
+        display: grid;
+        gap: 12px;
+        min-height: 180px;
+        padding: 20px;
+        place-items: center;
+        text-align: center;
+        border: 1px dashed #9aa7b5;
+        border-radius: 8px;
+        background: #fbfcfd;
+        transition: border-color 160ms ease, background 160ms ease;
+      }
+
+      .dropzone.dragging,
+      .dropzone:focus-within {
+        border-color: var(--accent);
+        background: #f0fbfc;
+      }
+
+      input[type="file"] {
+        width: 100%;
+        max-width: 320px;
+        color: var(--muted);
+      }
+
+      input[type="file"]::file-selector-button {
+        margin-right: 12px;
+        padding: 10px 14px;
+        border: 0;
+        border-radius: 6px;
+        background: #e7f4f6;
+        color: var(--accent-dark);
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      .file-name {
+        min-height: 1.4em;
+        color: var(--text);
+        font-weight: 700;
+        overflow-wrap: anywhere;
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+      }
+
+      button,
+      .download {
+        min-height: 44px;
+        padding: 0 16px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        border: 0;
+        border-radius: 6px;
+        background: var(--accent);
+        color: #ffffff;
+        font: inherit;
+        font-weight: 800;
+        text-decoration: none;
+        cursor: pointer;
+      }
+
+      button:hover,
+      .download:hover {
+        background: var(--accent-dark);
+      }
+
+      button:disabled,
+      .download[aria-disabled="true"] {
+        background: #c6ced7;
+        cursor: not-allowed;
+        pointer-events: none;
+      }
+
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .stat {
+        min-width: 0;
+        padding: 12px;
+        border: 1px solid #e1e6ed;
+        border-radius: 8px;
+        background: #fbfcfd;
+      }
+
+      .stat span {
+        display: block;
+        color: var(--muted);
+        font-size: 0.78rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+
+      .stat strong {
+        display: block;
+        margin-top: 5px;
+        font-size: 1rem;
+        overflow-wrap: anywhere;
+      }
+
+      .status {
+        min-height: 1.5em;
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.5;
+      }
+
+      .status.error {
+        color: var(--danger);
+        font-weight: 700;
+      }
+
+      .status.success {
+        color: var(--success);
+        font-weight: 700;
+      }
+
+      .status.warning {
+        color: #8a5a00;
+        font-weight: 700;
+      }
+
+      footer {
+        margin-top: 22px;
+        color: var(--muted);
+        font-size: 0.92rem;
+      }
+
+      @media (max-width: 820px) {
+        main {
+          width: min(100% - 24px, 560px);
+          padding: 28px 0;
+        }
+
+        .app {
+          grid-template-columns: 1fr;
+        }
+
+        .stats {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>LZW File Compressor</h1>
+        <p class="subtitle">Compress any local file into a binary .lzw file, then restore it back with the same byte-for-byte contents.</p>
+      </header>
+
+      <section class="app" aria-label="LZW file tools">
+        <article class="tool">
+          <h2>Compress</h2>
+          <label class="dropzone" id="compressDrop">
+            <input id="compressInput" type="file">
+            <span class="file-name" id="compressName">No file selected</span>
+          </label>
+          <div class="actions">
+            <button id="compressButton" type="button" disabled>Compress</button>
+            <a class="download" id="compressDownload" aria-disabled="true">Download .lzw</a>
+          </div>
+          <div class="stats" aria-label="Compression statistics">
+            <div class="stat">
+              <span>Original</span>
+              <strong id="compressOriginal">-</strong>
+            </div>
+            <div class="stat">
+              <span>Compressed</span>
+              <strong id="compressResult">-</strong>
+            </div>
+            <div class="stat">
+              <span>Change</span>
+              <strong id="compressRatio">-</strong>
+            </div>
+          </div>
+          <p class="status" id="compressStatus"></p>
+        </article>
+
+        <article class="tool">
+          <h2>Decompress</h2>
+          <label class="dropzone" id="decompressDrop">
+            <input id="decompressInput" type="file" accept=".lzw,application/octet-stream">
+            <span class="file-name" id="decompressName">No .lzw file selected</span>
+          </label>
+          <div class="actions">
+            <button id="decompressButton" type="button" disabled>Decompress</button>
+            <a class="download" id="decompressDownload" aria-disabled="true">Download file</a>
+          </div>
+          <div class="stats" aria-label="Decompression statistics">
+            <div class="stat">
+              <span>Input</span>
+              <strong id="decompressOriginal">-</strong>
+            </div>
+            <div class="stat">
+              <span>Output</span>
+              <strong id="decompressResult">-</strong>
+            </div>
+            <div class="stat">
+              <span>Header</span>
+              <strong id="decompressHeader">-</strong>
+            </div>
+          </div>
+          <p class="status" id="decompressStatus"></p>
+        </article>
+      </section>
+
+      <footer>LZW files use the header <strong>LZW\x00</strong>, variable-width bit packing, and dictionary resets.</footer>
+    </main>
+
+    <script src="lzw.js"></script>
+    <script>
+      const state = {
+        compressFile: null,
+        decompressFile: null,
+        compressUrl: null,
+        decompressUrl: null,
+      };
+
+      const elements = {
+        compressInput: document.querySelector("#compressInput"),
+        compressName: document.querySelector("#compressName"),
+        compressButton: document.querySelector("#compressButton"),
+        compressDownload: document.querySelector("#compressDownload"),
+        compressOriginal: document.querySelector("#compressOriginal"),
+        compressResult: document.querySelector("#compressResult"),
+        compressRatio: document.querySelector("#compressRatio"),
+        compressStatus: document.querySelector("#compressStatus"),
+        compressDrop: document.querySelector("#compressDrop"),
+        decompressInput: document.querySelector("#decompressInput"),
+        decompressName: document.querySelector("#decompressName"),
+        decompressButton: document.querySelector("#decompressButton"),
+        decompressDownload: document.querySelector("#decompressDownload"),
+        decompressOriginal: document.querySelector("#decompressOriginal"),
+        decompressResult: document.querySelector("#decompressResult"),
+        decompressHeader: document.querySelector("#decompressHeader"),
+        decompressStatus: document.querySelector("#decompressStatus"),
+        decompressDrop: document.querySelector("#decompressDrop"),
+      };
+
+      function formatBytes(bytes) {
+        if (bytes === 0) {
+          return "0 B";
+        }
+        const units = ["B", "KB", "MB", "GB"];
+        const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+        const value = bytes / 1024 ** index;
+        return `${value.toFixed(value >= 10 || index === 0 ? 0 : 1)} ${units[index]}`;
+      }
+
+      function setStatus(element, message, type = "") {
+        element.textContent = message;
+        element.className = `status ${type}`.trim();
+      }
+
+      function revokeUrl(key) {
+        if (state[key]) {
+          URL.revokeObjectURL(state[key]);
+          state[key] = null;
+        }
+      }
+
+      function resetDownload(link, key) {
+        revokeUrl(key);
+        link.removeAttribute("href");
+        link.removeAttribute("download");
+        link.setAttribute("aria-disabled", "true");
+      }
+
+      function setDownload(link, key, bytes, filename) {
+        resetDownload(link, key);
+        const blob = bytes instanceof Blob ? bytes : new Blob([bytes], { type: "application/octet-stream" });
+        const url = URL.createObjectURL(blob);
+        state[key] = url;
+        link.href = url;
+        link.download = filename;
+        link.setAttribute("aria-disabled", "false");
+      }
+
+      function outputNameForCompressed(file) {
+        return `${file.name}.lzw`;
+      }
+
+      function outputNameForDecompressed(file) {
+        return file.name.toLowerCase().endsWith(".lzw")
+          ? file.name.slice(0, -4)
+          : `${file.name}.decompressed`;
+      }
+
+      async function fileToBytes(file) {
+        return new Uint8Array(await file.arrayBuffer());
+      }
+
+      function useDroppedFile(event, input) {
+        event.preventDefault();
+        const file = event.dataTransfer.files[0];
+        if (!file) {
+          return;
+        }
+        const transfer = new DataTransfer();
+        transfer.items.add(file);
+        input.files = transfer.files;
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+
+      function wireDropzone(dropzone, input) {
+        ["dragenter", "dragover"].forEach((name) => {
+          dropzone.addEventListener(name, (event) => {
+            event.preventDefault();
+            dropzone.classList.add("dragging");
+          });
+        });
+
+        ["dragleave", "drop"].forEach((name) => {
+          dropzone.addEventListener(name, () => {
+            dropzone.classList.remove("dragging");
+          });
+        });
+
+        dropzone.addEventListener("drop", (event) => useDroppedFile(event, input));
+      }
+
+      elements.compressInput.addEventListener("change", () => {
+        const file = elements.compressInput.files[0] || null;
+        state.compressFile = file;
+        elements.compressButton.disabled = !file;
+        elements.compressName.textContent = file ? file.name : "No file selected";
+        elements.compressOriginal.textContent = file ? formatBytes(file.size) : "-";
+        elements.compressResult.textContent = "-";
+        elements.compressRatio.textContent = "-";
+        setStatus(elements.compressStatus, "");
+        resetDownload(elements.compressDownload, "compressUrl");
+      });
+
+      elements.decompressInput.addEventListener("change", async () => {
+        const file = elements.decompressInput.files[0] || null;
+        state.decompressFile = file;
+        elements.decompressButton.disabled = !file;
+        elements.decompressName.textContent = file ? file.name : "No .lzw file selected";
+        elements.decompressOriginal.textContent = file ? formatBytes(file.size) : "-";
+        elements.decompressResult.textContent = "-";
+        elements.decompressHeader.textContent = "-";
+        setStatus(elements.decompressStatus, "");
+        resetDownload(elements.decompressDownload, "decompressUrl");
+
+        if (file) {
+          const head = new Uint8Array(await file.slice(0, 4).arrayBuffer());
+          elements.decompressHeader.textContent = LZWCodec.hasMagic(head) ? "Valid" : "Invalid";
+        }
+      });
+
+      elements.compressButton.addEventListener("click", async () => {
+        const file = state.compressFile;
+        if (!file) {
+          return;
+        }
+
+        elements.compressButton.disabled = true;
+        setStatus(elements.compressStatus, "Compressing...");
+        resetDownload(elements.compressDownload, "compressUrl");
+
+        try {
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          const originalBytes = await fileToBytes(file);
+          const compressed = LZWCodec.compressFileDataParts(originalBytes);
+          const compressedBlob = new Blob(compressed.parts, { type: "application/octet-stream" });
+          const change = file.size === 0 ? 0 : ((compressed.size - file.size) / file.size) * 100;
+
+          elements.compressResult.textContent = formatBytes(compressed.size);
+          elements.compressRatio.textContent = `${change >= 0 ? "+" : ""}${change.toFixed(1)}%`;
+          setDownload(elements.compressDownload, "compressUrl", compressedBlob, outputNameForCompressed(file));
+          if (compressed.size > file.size) {
+            setStatus(
+              elements.compressStatus,
+              `Compressed ${compressed.codeCount.toLocaleString()} codes, but the .lzw file is larger than the original.`,
+              "warning",
+            );
+          } else {
+            setStatus(elements.compressStatus, `Compressed ${compressed.codeCount.toLocaleString()} codes and ready to download.`, "success");
+          }
+        } catch (error) {
+          setStatus(elements.compressStatus, error.message, "error");
+        } finally {
+          elements.compressButton.disabled = false;
+        }
+      });
+
+      elements.decompressButton.addEventListener("click", async () => {
+        const file = state.decompressFile;
+        if (!file) {
+          return;
+        }
+
+        elements.decompressButton.disabled = true;
+        setStatus(elements.decompressStatus, "Decompressing...");
+        resetDownload(elements.decompressDownload, "decompressUrl");
+
+        try {
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          const compressedBytes = await fileToBytes(file);
+          const originalBytes = LZWCodec.decompressFileData(compressedBytes);
+
+          elements.decompressHeader.textContent = "Valid";
+          elements.decompressResult.textContent = formatBytes(originalBytes.length);
+          setDownload(elements.decompressDownload, "decompressUrl", originalBytes, outputNameForDecompressed(file));
+          setStatus(elements.decompressStatus, "Decompressed and ready to download.", "success");
+        } catch (error) {
+          elements.decompressHeader.textContent = "Invalid";
+          setStatus(elements.decompressStatus, error.message, "error");
+        } finally {
+          elements.decompressButton.disabled = false;
+        }
+      });
+
+      wireDropzone(elements.compressDrop, elements.compressInput);
+      wireDropzone(elements.decompressDrop, elements.decompressInput);
+    </script>
+  </body>
+</html>
